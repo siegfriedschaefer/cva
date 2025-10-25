@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2025, Daily
+# Copyright (c) 2025, Siegfried Schaefer
 #
 # SPDX-License-Identifier: BSD 2-Clause License
 #

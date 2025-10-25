@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2024–2025, Daily
+# Copyright (c) 2025, Siegfried Schaefer
 #
 # SPDX-License-Identifier: BSD 2-Clause License
 #
@@ -84,7 +85,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--keyfile", help="full path to ssl key file")
     parser.add_argument("--certfile", help="full path to ssl cert file")
-    
+
     parser.add_argument("--verbose", "-v", action="count")
     args = parser.parse_args()
 
