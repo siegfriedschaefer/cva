@@ -5,7 +5,6 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 import os
-import sys
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -14,8 +13,6 @@ from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
@@ -26,31 +23,24 @@ from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 
-from google.genai import types
-
 load_dotenv(override=True)
-
-#SYSTEM_INSTRUCTION = f"""
-#"You are Gemini Chatbot, a friendly, helpful robot.
-#
-#Your goal is to demonstrate your capabilities in a succinct way.
-#
-#Your output will be converted to audio so don't include special characters in your answers.
-#
-#Respond to what the user said in a creative and helpful way. Keep your responses brief. One or two sentences at most.
-#"""
 
 SYSTEM_INSTRUCTION = f"""
 Du bist Laura, ein freundlicher und hilfsbereiter KI Agent.
 Deine Aufgabe ist es Deine Fähigkeiten auf prägnante Art und Weise zu demonstrieren.
+Bitte formuliere alle Antworten in deutscher Sprache.
 Deine Antworten werden in eine Audiodatei umgewandelt, verzichte bitte auf Sonderzeichen.
 """
 
-async def get_current_datetime(params: FunctionCallParams):
-    """Gets the current date and time."""
+async def get_datetime(params: FunctionCallParams):
+    """Get the current date and time as a structured response."""
     from datetime import datetime
-    datetimestr = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    await params.result_callback({"answer":f"Heute ist der {datetimestr}."})
+    datestr = datetime.now().strftime("%Y-%m-%d")
+    clockstr = datetime.now().strftime("%H:%M:%S")
+    await params.result_callback({
+        "datum": f"Heute ist der {datestr}.",
+        "uhrzeit": f"Es ist {clockstr} Uhr."
+    })
 
 
 async def run_bot(webrtc_connection):
@@ -64,7 +54,7 @@ async def run_bot(webrtc_connection):
         ),
     )
 
-    get_current_datetime_function = FunctionSchema(
+    get_datetime_function = FunctionSchema(
         name="get_datetime",
         description="Get current date and time.",
         properties={
@@ -75,7 +65,8 @@ async def run_bot(webrtc_connection):
         },
         required=["question"],
     )
-    tools = ToolsSchema(standard_tools=[get_current_datetime_function])
+
+    tools = ToolsSchema(standard_tools=[get_datetime_function])
 
 
 
@@ -85,28 +76,28 @@ async def run_bot(webrtc_connection):
         language="DE_DE",
         transcribe_user_audio=True,
         transcribe_model_audio=True,
-        tools=tools
-#        system_instruction=SYSTEM_INSTRUCTION,
+        tools=tools,
+        system_instruction=SYSTEM_INSTRUCTION,
     )
-    llm.register_function("get_datetime", get_current_datetime)
+    llm.register_function("get_datetime", get_datetime)
 
 
     messages = [
-        {
-            "role": "system", 
-            "content":
-                        """\
-                        Du bist Laura, ein freundlicher und hilfsbereiter KI Agent.
-                        Deine Aufgabe ist es Deine Fähigkeiten auf prägnante Art und Weise zu demonstrieren.
-                        Deine Antworten werden in eine Audiodatei umgewandelt, verzichte bitte auf Sonderzeichen.
-                        Du kannst auf Fragen nach dem Datum oder der Uhrzeit mit der Funktion get_datetime reagieren.
-
-                        You have access to the following tools: get_datetime.
-
-                        You can respond to questions about the time and date using the get_datetime tool.
-
-                        """
-        },
+#        {
+#            "role": "system", 
+#            "content":
+#                        """\
+#                        Du bist Laura, ein freundlicher und hilfsbereiter KI Agent.
+#                        Deine Aufgabe ist es Deine Fähigkeiten auf prägnante Art und Weise zu demonstrieren.
+#                        Deine Antworten werden in eine Audiodatei umgewandelt, verzichte bitte auf Sonderzeichen.
+#                        Du kannst auf Fragen nach dem Datum oder der Uhrzeit mit der Funktion get_datetime reagieren.##
+#
+#                        Folgende Tools stehen Dir zur Verfuegung: get_datetime.#
+#
+#                        Du kannst auf Fragen nach dem Datum oder der Uhrzeit mit der Funktion get_datetime beantworten.
+#
+#                        """
+#        },
         {
             "role": "user",
 #                "content": "Start by greeting the user warmly and introducing yourself.",
@@ -115,7 +106,6 @@ async def run_bot(webrtc_connection):
     ]
     context = OpenAILLMContext(messages, tools)
     context_aggregator = llm.create_context_aggregator(context)
-#    context_aggregator = LLMContextAggregatorPair(context)
 
 
 # excerpt from https://www.cerebrium.ai/blog/creating-a-realtime-rag-voice-agent
