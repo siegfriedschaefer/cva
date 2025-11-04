@@ -21,6 +21,7 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 
 
@@ -28,7 +29,7 @@ from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 
 from pipecat.services.google.llm import GoogleLLMService
-from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
+# from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -106,12 +107,20 @@ async def query_knowledge_base(params: FunctionCallParams):
     # so we remove them.
     conversation_turns = params.context.get_messages()[2:]
 
+    def _get_field(turn, name, default=None):
+        if isinstance(turn, dict):
+            return turn.get(name, default)
+        # Pydantic v2 models
+        if hasattr(turn, "model_dump"):
+            data = turn.model_dump()
+            return data.get(name, default)
+        return getattr(turn, name, default)
+
     def _is_tool_call(turn):
-        if turn.get("role", None) == "tool":
+        if _get_field(turn, "role") == "tool":
             return True
-        if turn.get("tool_calls", None):
-            return True
-        return False
+        tool_calls = _get_field(turn, "tool_calls")
+        return bool(tool_calls)
 
     # filter out tool calls
     messages = [turn for turn in conversation_turns if not _is_tool_call(turn)]
@@ -119,7 +128,17 @@ async def query_knowledge_base(params: FunctionCallParams):
 
     # use the last 3 turns as the conversation history/context
     messages = messages[-3:]
-    messages_json = json.dumps(messages, ensure_ascii=False, indent=2)
+    def _to_plain(turn):
+        if isinstance(turn, dict):
+            return turn
+        if hasattr(turn, "model_dump"):
+            return turn.model_dump()
+        return {
+            "role": getattr(turn, "role", None),
+            "content": getattr(turn, "parts", getattr(turn, "content", None)),
+        }
+
+    messages_json = json.dumps([_to_plain(m) for m in messages], ensure_ascii=False, indent=2)
 
     logger.info(f"Conversation turns: {messages_json}")
 
@@ -140,6 +159,7 @@ async def query_knowledge_base(params: FunctionCallParams):
     logger.info(response.text)
 
     await params.result_callback({"answer": f"{response.text}"})
+
 
 async def run_bot(webrtc_connection):
     pipecat_transport = SmallWebRTCTransport(
@@ -178,7 +198,18 @@ async def run_bot(webrtc_connection):
 
     tools = ToolsSchema(standard_tools=[get_datetime_function, query_function])
 
-    llm = GoogleLLMService(api_key=os.getenv("GOOGLE_API_KEY"), model="gemini-2.0-flash-001")
+    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"),)
+
+    tts = CartesiaTTSService(
+        api_key=os.getenv("CARTESIA_API_KEY"),
+        voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
+    )
+
+    llm = GoogleLLMService(api_key=os.getenv("GOOGLE_API_KEY"), 
+                           model="gemini-2.0-flash-001",
+                           language="En_EN",
+                           tools=tools,
+                           system_instruction=SYSTEM_INSTRUCTION)
 
 
 #    llm = GeminiLiveLLMService(
@@ -217,8 +248,14 @@ async def run_bot(webrtc_connection):
             "content": "Beginne damit, den Benutzer herzlich zu begrüßen und dich vorzustellen."
         }
     ]
-    context = OpenAILLMContext(messages, tools)
-    context_aggregator = llm.create_context_aggregator(context)
+
+#    GeminiLIveApi    
+#    context = OpenAILLMContext(messages, tools)
+#    context_aggregator = llm.create_context_aggregator(context)
+
+    context = LLMContext(messages, tools)
+    context_aggregator = LLMContextAggregatorPair(context)
+
 
 # excerpt from https://www.cerebrium.ai/blog/creating-a-realtime-rag-voice-agent
 
@@ -229,17 +266,6 @@ async def run_bot(webrtc_connection):
 #            history_messages_key="chat_history",
 #            input_messages_key="input")
 #        lc = LangchainProcessor(history_chain)
-
-
-
-
-
-    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
-
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY"),
-        voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
-    )
 
     pipeline = Pipeline(
         [
@@ -257,15 +283,15 @@ async def run_bot(webrtc_connection):
 
 
 
-    pipeline = Pipeline(
-        [
-            pipecat_transport.input(),
-            context_aggregator.user(),
-            llm,
-            pipecat_transport.output(),
-            context_aggregator.assistant(),
-        ]
-    )
+#    pipeline = Pipeline(
+#        [
+#            pipecat_transport.input(),
+#            context_aggregator.user(),
+#            llm,
+#            pipecat_transport.output(),
+#            context_aggregator.assistant(),
+#        ]
+#    )
 
 #    whisker = WhiskerObserver(pipeline)
 

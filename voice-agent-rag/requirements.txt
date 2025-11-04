@@ -2,3 +2,6 @@ python-dotenv
 fastapi[all]
 uvicorn
 pipecat-ai[google,silero, webrtc]>=0.0.82
+openai>=1.51.0
+deepgram-sdk==3.7.7
+
