@@ -38,6 +38,11 @@ from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 
+from deepgram import (
+    LiveOptions
+)
+
+
 # from pipecat_whisker import WhiskerObserver
 
 load_dotenv(override=True)
@@ -198,11 +203,15 @@ async def run_bot(webrtc_connection):
 
     tools = ToolsSchema(standard_tools=[get_datetime_function, query_function])
 
-    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"),)
+    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"),
+                             live_options=LiveOptions (
+                                 language='de'
+                             ))
 
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY"),
-        voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
+        model_id="sonic-3",
+        voice_id="576a28db-95fe-4b40-adaa-69a4249e8085",  # Laura
     )
 
     llm = GoogleLLMService(api_key=os.getenv("GOOGLE_API_KEY"), 
