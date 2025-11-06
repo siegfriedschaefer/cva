@@ -29,4 +29,3 @@ quality_assurance_review_task:
     Don't be too formal, we are a chill and cool company
     but maintain a professional and friendly tone throughout.
   agent: support_quality_assurance_agent
-  markdown: true
