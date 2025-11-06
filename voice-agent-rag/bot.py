@@ -38,6 +38,8 @@ from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 
+from customer_support import SupportCrew
+
 from deepgram import (
     LiveOptions
 )
@@ -47,23 +49,17 @@ from deepgram import (
 
 load_dotenv(override=True)
 
+support_team = SupportCrew()
+
+support_team.crew()
+
 # Initialize the client globally
 client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
-
-def get_rag_content():
-    """Get the RAG content from the file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    rag_content_path = os.path.join(script_dir, "assets", "rag-content.txt")
-    with open(rag_content_path, "r") as f:
-        return f.read()
-
-
-
 SYSTEM_INSTRUCTION = f"""
-Du bist Laura, ein freundlicher und hilfsbereiter KI Agent.
-Deine Aufgabe ist es Deine Fähigkeiten auf prägnante Art und Weise zu demonstrieren.
-Bitte formuliere alle Antworten in deutscher Sprache.
+Du bist Laura, eine freundliche und hilfsbereite Mitarbeiterin.
+Deine Aufgabe ist es Dein Wissen auf prägnante Art und Weise mitzuteilen.
+Formuliere alle Antworten in deutscher Sprache.
 Deine Antworten werden in eine Audiodatei umgewandelt, verzichte bitte auf Sonderzeichen.
 """
 
@@ -76,32 +72,6 @@ async def get_datetime(params: FunctionCallParams):
         "datum": f"Heute ist der {datestr}.",
         "uhrzeit": f"Es ist {clockstr} Uhr."
     })
-
-RAG_MODEL = "gemini-2.0-flash-lite-preview-02-05"
-VOICE_MODEL = "gemini-2.0-flash"
-RAG_CONTENT = get_rag_content()
-RAG_PROMPT = f"""
-You are a helpful assistant designed to answer user questions based solely on the provided knowledge base.
-
-**Instructions:**
-
-1.  **Knowledge Base Only:** Answer questions *exclusively* using the information in the "Knowledge Base" section below. Do not use any outside information.
-2.  **Conversation History:** Use the "Conversation History" (ordered oldest to newest) to understand the context of the current question.
-3.  **Concise Response:**  Respond in 50 words or fewer.  The response will be spoken, so avoid symbols, abbreviations, or complex formatting. Use plain, natural language.
-4.  **Unknown Answer:** If the answer is not found within the "Knowledge Base," respond with "I don't know." Do not guess or make up an answer.
-5. Do not introduce your response. Just provide the answer.
-6. You must follow all instructions.
-
-**Input Format:**
-
-Each request will include:
-
-*   **Conversation History:**  (A list of previous user and assistant messages, if any)
-
-**Knowledge Base:**
-Here is the knowledge base you have access to:
-{RAG_CONTENT}
-"""
 
 async def query_knowledge_base(params: FunctionCallParams):
     """Query the knowledge base for the answer to the question."""
@@ -148,22 +118,19 @@ async def query_knowledge_base(params: FunctionCallParams):
     logger.info(f"Conversation turns: {messages_json}")
 
     start = time.perf_counter()
-    full_prompt = f"System: {RAG_PROMPT}\n\nConversation History: {messages_json}"
 
-    response = await client.aio.models.generate_content(
-        model=RAG_MODEL,
-        contents=[full_prompt],
-        config={
-            "temperature": 0.1,
-            "max_output_tokens": 64,
-        },
-    )
+    full_prompt = f"Conversation History: {messages_json}"
+    response = SupportCrew().crew().kickoff(inputs={
+        "customer": "Schaefer.AI",
+        "person": "Siegfried Schaefer",
+        "inquiry": f"{full_prompt}"
+    })
 
     end = time.perf_counter()
     logger.info(f"Time taken: {end - start:.2f} seconds")
-    logger.info(response.text)
+    logger.info(response)
 
-    await params.result_callback({"answer": f"{response.text}"})
+    await params.result_callback({"answer": f"{response}"})
 
 
 async def run_bot(webrtc_connection):
@@ -191,11 +158,11 @@ async def run_bot(webrtc_connection):
 
     query_function = FunctionSchema(
         name="query_knowledge_base",
-        description="query infos about family Fischer.",
+        description="query infos about a temperature controlunit .",
         properties={
             "question": {
                 "type": "string",
-                "description": "The question to query informations about family Fischer.",
+                "description": "The question to query informations about a temperature control unit.",
             },
         },
         required=["question"],
@@ -236,25 +203,9 @@ async def run_bot(webrtc_connection):
     llm.register_function("query_knowledge_base", query_knowledge_base)
 
     messages = [
-#        {
-#            "role": "system", 
-#            "content":
-#                        """\
-#                        Du bist Laura, ein freundlicher und hilfsbereiter KI Agent.
-#                        Deine Aufgabe ist es Deine Fähigkeiten auf prägnante Art und Weise zu demonstrieren.
-#                        Deine Antworten werden in eine Audiodatei umgewandelt, verzichte bitte auf Sonderzeichen.
-#                        Du kannst auf Fragen nach dem Datum oder der Uhrzeit mit der Funktion get_datetime reagieren.##
-#
-#                        Folgende Tools stehen Dir zur Verfuegung: get_datetime.#
-#
-#                        Du kannst auf Fragen nach dem Datum oder der Uhrzeit mit der Funktion get_datetime beantworten.
-#
-#                        """
-#        },
         {
             "role": "user",
-#                "content": "Start by greeting the user warmly and introducing yourself.",
-            "content": "Beginne damit, den Benutzer herzlich zu begrüßen und dich vorzustellen."
+            "content": "Beginne damit, dich kurz vorzustellen. Formuliere alle Antworten in einem guten Deutsch und auch darauf Zahlen und Uhrzeiten auf Deutsch zu nennen."
         }
     ]
 
@@ -264,17 +215,6 @@ async def run_bot(webrtc_connection):
 
     context = LLMContext(messages, tools)
     context_aggregator = LLMContextAggregatorPair(context)
-
-
-# excerpt from https://www.cerebrium.ai/blog/creating-a-realtime-rag-voice-agent
-
-#    chain = prompt | ChatOpenAI(model="gpt-4o", temperature=0.7)
-#        history_chain = RunnableWithMessageHistory(
-#            chain,
-#            get_session_history,
-#            history_messages_key="chat_history",
-#            input_messages_key="input")
-#        lc = LangchainProcessor(history_chain)
 
     pipeline = Pipeline(
         [
@@ -288,22 +228,7 @@ async def run_bot(webrtc_connection):
         ]
     )
 
-
-
-
-
-#    pipeline = Pipeline(
-#        [
-#            pipecat_transport.input(),
-#            context_aggregator.user(),
-#            llm,
-#            pipecat_transport.output(),
-#            context_aggregator.assistant(),
-#        ]
-#    )
-
-#    whisker = WhiskerObserver(pipeline)
-
+    # whisker = WhiskerObserver(pipeline)
 
     task = PipelineTask(
         pipeline,
@@ -311,9 +236,8 @@ async def run_bot(webrtc_connection):
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
-        idle_timeout_secs=10,
-#        observers=[whisker]
-#        idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
+        idle_timeout_secs=300,
+        # observers=[whisker]
     )
 
     @pipecat_transport.event_handler("on_client_connected")
