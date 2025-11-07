@@ -24,12 +24,15 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 
-
-from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.google.stt import GoogleSTTService
+from pipecat.transcriptions.language import Language
 
 from pipecat.services.google.llm import GoogleLLMService
 # from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
+
+from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -170,16 +173,29 @@ async def run_bot(webrtc_connection):
 
     tools = ToolsSchema(standard_tools=[get_datetime_function, query_function])
 
-    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"),
-                             live_options=LiveOptions (
-                                 language='de'
-                             ))
+#    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"),
+#                             live_options=LiveOptions (
+#                                 language='de'
+#                             ))
 
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY"),
-        model_id="sonic-3",
-        voice_id="576a28db-95fe-4b40-adaa-69a4249e8085",  # Laura
+    stt = GoogleSTTService(
+        params=GoogleSTTService.InputParams(languages=Language.DE_DE, model="chirp_3"),
+        credentials=os.getenv("GOOGLE_TEST_CREDENTIALS"),
+        location="us",
     )
+
+
+#    tts = CartesiaTTSService(
+#        api_key=os.getenv("CARTESIA_API_KEY"),
+#        model_id="sonic-3",
+#        voice_id="576a28db-95fe-4b40-adaa-69a4249e8085",  # Laura
+#    )
+
+    tts = ElevenLabsTTSService(
+        api_key=os.getenv("ELEVENLABS_API_KEY", ""),
+        voice_id=os.getenv("ELEVENLABS_SIGGIS_ID", "")
+    )
+
 
     llm = GoogleLLMService(api_key=os.getenv("GOOGLE_API_KEY"), 
                            model="gemini-2.0-flash-001",
