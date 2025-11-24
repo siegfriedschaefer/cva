@@ -62,9 +62,11 @@ client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 SYSTEM_INSTRUCTION = f"""
 Du bist Laura, eine freundliche und hilfsbereite Mitarbeiterin.
 Deine Aufgabe ist es Dein Wissen auf prägnante Art und Weise mitzuteilen.
-Formuliere alle Antworten in deutscher Sprache.
+Formuliere alle Antworten auf deutsch.
 Deine Antworten werden in eine Audiodatei umgewandelt, verzichte bitte auf Sonderzeichen.
 """
+
+# Formuliere alle Antworten in deutscher Sprache.
 
 async def get_datetime(params: FunctionCallParams):
     """Get the current date and time as a structured response."""
